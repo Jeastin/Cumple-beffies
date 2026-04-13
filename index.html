@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Cumpleaños | Beffies</title>
+
+<style>
+  body { font-family: "Segoe UI", Tahoma; background: #f3f2f1; margin: 0; }
+  .container { max-width: 900px; margin: auto; padding: 20px; }
+  h1 { color: #323130; }
+
+  .tabs { display: flex; margin-bottom: 20px; }
+  .tab { padding: 10px 20px; cursor: pointer; background: #e1dfdd; border-radius: 6px 6px 0 0; margin-right: 5px; }
+  .tab.active { background: white; font-weight: bold; }
+
+  .card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
+
+  label { font-size: 13px; color: #605e5c; margin-top: 10px; display: block; }
+
+  input { width: 100%; padding: 10px; border: 1px solid #c8c6c4; border-radius: 6px; margin-top: 5px; }
+
+  button { background: #0078d4; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+
+  .toggle-container { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+
+  .switch { position: relative; width: 42px; height: 22px; }
+  .switch input { display: none; }
+
+  .slider {
+    position: absolute;
+    background: #ccc;
+    border-radius: 22px;
+    top: 0; left: 0; right: 0; bottom: 0;
+    transition: .3s;
+  }
+
+  .slider:before {
+    content: "";
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background: white;
+    border-radius: 50%;
+    transition: .3s;
+  }
+
+  input:checked + .slider { background: #0078d4; }
+  input:checked + .slider:before { transform: translateX(20px); }
+
+  .result {
+    background: white;
+    border-left: 5px solid #0078d4;
+    padding: 15px;
+    margin-top: 10px;
+    border-radius: 6px;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>Cumpleaños | Beffies 🎂</h1>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('beffies', this)">Cumpleaños | Beffies En Casa</div>
+    <div class="tab" onclick="switchTab('split', this)">Cumpleaños | Beffies en Restaurante</div>
+  </div>
+
+  <!-- TAB RESTAURANTE -->
+  <div id="splitTab" style="display:none;">
+    <div class="card">
+      <label>Gasto en Postres</label>
+      <input id="postre" oninput="formatCurrency(this)">
+      <label>Monto Límite por Cumpleañero</label>
+      <input id="limite" value="₡8,000" oninput="formatCurrency(this)">
+    </div>
+
+    <div id="asistentes"></div>
+
+    <button onclick="agregarAsistente()">Agregar Participante</button>
+    <button onclick="calcular()">Procesar</button>
+
+    <div id="resultados"></div>
+  </div>
+
+  <!-- TAB BEFFIES -->
+  <div id="beffiesTab">
+    <div class="card">
+      <label>Total Comida</label>
+      <input id="bComida" oninput="formatCurrency(this)">
+      <label>Total Postre</label>
+      <input id="bPostre" oninput="formatCurrency(this)">
+    </div>
+
+    <div id="bAsistentes"></div>
+
+    <button onclick="agregarB()">Agregar Participante</button>
+    <button onclick="calcularB()">Procesar</button>
+
+    <div id="bResultados"></div>
+  </div>
+
+</div>
+
+<script>
+
+// ---------- TAB SWITCH ----------
+function switchTab(tab, el) {
+  document.getElementById("splitTab").style.display = tab === "split" ? "block" : "none";
+  document.getElementById("beffiesTab").style.display = tab === "beffies" ? "block" : "none";
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  el.classList.add("active");
+}
+
+// ---------- FORMAT ----------
+function formatCurrency(input) {
+  let v = input.value.replace(/[^\d]/g, "");
+  input.value = v ? "₡" + Number(v).toLocaleString() : "";
+}
+function parse(v){ return Number(v.replace(/[^\d]/g,'')) || 0; }
+
+// ---------- RESTAURANTE ----------
+let asistentes = [];
+function agregarAsistente() {
+  asistentes.push({nombre:"",gasto:0,esCumple:false,regalo:0});
+  render();
+}
+function render(){
+  let c=document.getElementById("asistentes"); c.innerHTML="";
+  asistentes.forEach((a,i)=>{
+    let gastoFmt=a.gasto?"₡"+a.gasto.toLocaleString():"";
+    let regaloFmt=a.regalo?"₡"+a.regalo.toLocaleString():"";
+
+    c.innerHTML+=`
+    <div class="card">
+      <input value="${a.nombre||""}" placeholder="Nombre" onchange="asistentes[${i}].nombre=this.value">
+      <input value="${gastoFmt}" placeholder="Gasto" oninput="formatCurrency(this); asistentes[${i}].gasto=parse(this.value)">
+      
+      <div class="toggle-container">
+        <label>Cumpleañero</label>
+        <label class="switch">
+          <input type="checkbox" ${a.esCumple?"checked":""} onchange="asistentes[${i}].esCumple=this.checked;render()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      ${a.esCumple?`<input value="${regaloFmt}" placeholder="Regalo" oninput="formatCurrency(this); asistentes[${i}].regalo=parse(this.value)">`:""}
+    </div>`;
+  });
+}
+
+function calcular(){
+  let postre=parse(document.getElementById("postre").value);
+  let limite=parse(document.getElementById("limite").value);
+
+  let cumple=asistentes.filter(a=>a.esCumple);
+  let total=asistentes.length;
+
+  let divisorPostre=(cumple.length>1)?total:asistentes.filter(a=>!a.esCumple).length;
+  let postrePP=divisorPostre?postre/divisorPostre:0;
+
+  let html="<h2>Resultados</h2>";
+
+  asistentes.forEach(p=>{
+    let totalP=0;
+    html+=`<div class="result"><b>${p.nombre}</b>`;
+
+    if(!p.esCumple){
+      totalP+=p.gasto;
+      html+=`<div>Consumo: ₡${p.gasto}</div>`;
+    }
+
+    if(!p.esCumple || cumple.length>1){
+      totalP+=postrePP;
+      html+=`<div>Postre: ₡${Math.round(postrePP)}</div>`;
+    }
+
+    cumple.forEach(c=>{
+      if(c===p)return;
+
+      let r=c.regalo/(total-1);
+      let comida=Math.min(c.gasto,limite)/(total-1);
+
+      totalP+=r+comida;
+
+      html+=`<div>Regalo ${c.nombre}: ₡${Math.round(r)}</div>`;
+      html+=`<div>Comida ${c.nombre}: ₡${Math.round(comida)}</div>`;
+    });
+
+    if(p.esCumple){
+      let ex=Math.max(0,p.gasto-limite);
+      totalP+=ex;
+      html+=`<div>Excedente: ₡${ex}</div>`;
+    }
+
+    html+=`<hr><b>Total: ₡${Math.round(totalP)}</b></div>`;
+  });
+
+  document.getElementById("resultados").innerHTML=html;
+}
+
+// ---------- BEFFIES ----------
+let bAsistentes=[];
+function agregarB(){ bAsistentes.push({nombre:"",esCumple:false,regalo:0}); renderB(); }
+
+function renderB(){
+  let c=document.getElementById("bAsistentes"); c.innerHTML="";
+  bAsistentes.forEach((a,i)=>{
+    let regaloFmt=a.regalo?"₡"+a.regalo.toLocaleString():"";
+
+    c.innerHTML+=`
+    <div class="card">
+      <input value="${a.nombre||""}" placeholder="Nombre" onchange="bAsistentes[${i}].nombre=this.value">
+
+      <div class="toggle-container">
+        <label>Cumpleañero</label>
+        <label class="switch">
+          <input type="checkbox" ${a.esCumple?"checked":""} onchange="bAsistentes[${i}].esCumple=this.checked;renderB()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      ${a.esCumple?`<input value="${regaloFmt}" placeholder="Regalo" oninput="formatCurrency(this); bAsistentes[${i}].regalo=parse(this.value)">`:""}
+    </div>`;
+  });
+}
+
+function calcularB(){
+  let comida=parse(document.getElementById("bComida").value);
+  let postre=parse(document.getElementById("bPostre").value);
+
+  let total=bAsistentes.length;
+  if(total === 0) return;
+
+  let cumple=bAsistentes.filter(a=>a.esCumple);
+  let normales=bAsistentes.filter(a=>!a.esCumple);
+
+  let comidaPP = normales.length ? comida / normales.length : 0;
+
+  let divisorPostre = (cumple.length === 1)
+  ? normales.length
+  : total;
+
+  let postrePP = divisorPostre ? postre / divisorPostre : 0;
+
+  let html="<h2>Resultados Beffies</h2>";
+
+  bAsistentes.forEach(p=>{
+    let totalP=0;
+    html+=`<div class="result"><b>${p.nombre}</b>`;
+
+    if(!p.esCumple){
+      totalP+=comidaPP;
+      html+=`<div>Comida: ₡${Math.round(comidaPP)}</div>`;
+    }
+
+    // 👇 NUEVA REGLA POSTRE
+    if(!p.esCumple || cumple.length > 1){
+    totalP += postrePP;
+    html += `<div>Postre: ₡${Math.round(postrePP)}</div>`;
+    }
+
+    cumple.forEach(c=>{
+      if(c===p)return;
+      let r=c.regalo/(total-1);
+      totalP+=r;
+      html+=`<div>Regalo ${c.nombre}: ₡${Math.round(r)}</div>`;
+    });
+
+    html+=`<hr><b>Total: ₡${Math.round(totalP)}</b></div>`;
+  });
+
+  document.getElementById("bResultados").innerHTML=html;
+}
+
+// INIT
+agregarAsistente();
+agregarB();
+
+</script>
+
+</body>
+</html>
