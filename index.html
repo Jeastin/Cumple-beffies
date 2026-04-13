@@ -321,10 +321,10 @@
         <div id="splitTab" style="display:none;">
             <div class="card">
                 <label>Gasto en Postres</label>
-                <input id="postre" oninput="formatCurrency(this)">
+                <input id="postre" inputmode="numeric" oninput="formatCurrency(this)">
 
                 <label>Monto Límite por Cumpleañero</label>
-                <input id="limite" value="₡8,000" oninput="formatCurrency(this)">
+                <input id="limite" inputmode="numeric" value="₡8,000" oninput="formatCurrency(this)">
             </div>
 
             <div id="asistentes"></div>
@@ -343,7 +343,7 @@
                 <input id="bComida" inputmode="numeric" oninput="formatCurrency(this)">
 
                 <label>Total Postre</label>
-                <input id="bPostre" oninput="formatCurrency(this)">
+                <input id="bPostre" inputmode="numeric" oninput="formatCurrency(this)">
             </div>
 
             <div id="bAsistentes"></div>
@@ -401,7 +401,7 @@
       <input value="${a.nombre || ""}" onchange="asistentes[${i}].nombre=this.value">
 
       <label>Gasto en Restaurante</label>
-      <input value="${a.gasto ? "₡" + a.gasto.toLocaleString() : ""}" oninput="formatCurrency(this); asistentes[${i}].gasto=parse(this.value)">
+      <input inputmode="numeric" value="${a.gasto ? "₡" + a.gasto.toLocaleString() : ""}" oninput="formatCurrency(this); asistentes[${i}].gasto=parse(this.value)">
 
       <div class="toggle-container">
         <label>Cumpleañero</label>
@@ -413,7 +413,7 @@
 
       ${a.esCumple ? `
         <label>Regalo</label>
-        <input value="${a.regalo ? "₡" + a.regalo.toLocaleString() : ""}" oninput="formatCurrency(this); asistentes[${i}].regalo=parse(this.value)">
+        <input inputmode="numeric" value="${a.regalo ? "₡" + a.regalo.toLocaleString() : ""}" oninput="formatCurrency(this); asistentes[${i}].regalo=parse(this.value)">
       `: ""}
     </div>`;
             });
@@ -494,7 +494,7 @@
 
       ${a.esCumple ? `
         <label>Regalo</label>
-        <input value="${a.regalo ? "₡" + a.regalo.toLocaleString() : ""}" oninput="formatCurrency(this); bAsistentes[${i}].regalo=parse(this.value)">
+        <input inputmode="numeric" value="${a.regalo ? "₡" + a.regalo.toLocaleString() : ""}" oninput="formatCurrency(this); bAsistentes[${i}].regalo=parse(this.value)">
       `: ""}
     </div>`;
             });
