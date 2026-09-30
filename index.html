@@ -466,7 +466,7 @@
         function nuevoParticipante(extra) {
             return Object.assign({
                 id: siguienteId++, nombre: "", gasto: 0, regalo: 0,
-                esCumple: false, esMujer: false, tienePareja: false, pareja: null
+                esCumple: false, esMujer: false, tienePareja: false, pareja: null, mesaCompartida: true
             }, extra);
         }
 
@@ -476,6 +476,20 @@
 
         function peso(lista, a) {
             return (a.tienePareja && !esParejaDeCumpleanera(lista, a)) ? 2 : 1;
+        }
+
+        // La cumpleañera come en la misma mesa que su pareja: la cuenta se anota en la tarjeta de él
+        function comeConPareja(lista, m) {
+            return m.esCumple && m.esMujer && m.mesaCompartida && lista.some(x => x.id === m.pareja);
+        }
+
+        function mesasCompartidasDe(lista, a) {
+            return lista.filter(m => m.pareja === a.id && comeConPareja(lista, m));
+        }
+
+        function gastoEfectivo(lista, m) {
+            if (!comeConPareja(lista, m)) return m.gasto;
+            return lista.find(x => x.id === m.pareja).gasto;
         }
 
         function pesoTotal(lista, personas) {
@@ -530,6 +544,13 @@
           ${opcionesPareja(lista, a)}
         </select>
         <div class="ayuda-campo">Normalmente es su pareja. Ese hombre verá el excedente en su total.</div>`;
+                    html += `<label>¿Comió en la misma mesa que su pareja?</label>` + seg([
+                        { t: "🍽️ Sí, una sola cuenta", on: a.mesaCompartida, js: `${ref}.mesaCompartida=true;${fn}()` },
+                        { t: "No, cuenta aparte", on: !a.mesaCompartida, js: `${ref}.mesaCompartida=false;${fn}()` }
+                    ]);
+                    if (a.mesaCompartida) {
+                        html += `<div class="ayuda-campo">Anota el gasto de toda la mesa en la tarjeta de su pareja. El grupo cubre hasta el límite y él paga lo que sobre.</div>`;
+                    }
                 }
             } else if (esParejaDeCumpleanera(lista, a)) {
                 html += `<div class="ayuda-campo">👫 Es la pareja de la cumpleañera: <b>paga su parte</b> y además lo que ella se pase del límite. No paga doble por ella.</div>`;
@@ -584,8 +605,9 @@
       <label>Nombre</label>
       <input value="${a.nombre || ""}" onchange="asistentes[${i}].nombre=this.value; refrescarParejas('asistentes')">
 
-      <label>Gasto en Restaurante</label>
-      <input inputmode="numeric" value="${a.gasto ? "₡" + a.gasto.toLocaleString() : ""}" oninput="formatCurrency(this); asistentes[${i}].gasto=parse(this.value)">
+      ${comeConPareja(asistentes, a) ? `<div class="ayuda-campo">🍽️ Comió junto a su pareja: el gasto de la mesa se anota en la tarjeta de <b>${(asistentes.find(x => x.id === a.pareja) || {}).nombre || "su pareja"}</b>.</div>` : `
+      <label>Gasto en Restaurante${mesasCompartidasDe(asistentes, a).length ? " (toda la mesa: el de él y el de " + mesasCompartidasDe(asistentes, a).map(m => m.nombre || "ella").join(", ") + ")" : ""}</label>
+      <input inputmode="numeric" value="${a.gasto ? "₡" + a.gasto.toLocaleString() : ""}" oninput="formatCurrency(this); asistentes[${i}].gasto=parse(this.value)">`}
 
       ${camposParticipante(asistentes, "asistentes", "render", i, a, true)}
     </div>`;
@@ -604,7 +626,7 @@
             let pesoPostre = pesoTotal(asistentes, pagaPostre);
             let postrePP = pesoPostre ? postre / pesoPostre : 0;
 
-            let esperado = postre + asistentes.reduce((s, a) => s + a.gasto + (a.esCumple ? a.regalo : 0), 0);
+            let esperado = postre + asistentes.reduce((s, a) => s + (comeConPareja(asistentes, a) ? 0 : a.gasto) + (a.esCumple ? a.regalo : 0), 0);
             let calculado = 0;
 
             let html = "<h2>Resultados</h2>";
@@ -615,11 +637,17 @@
                 html += `<div class="result"><b>${p.nombre}</b>${p.esCumple ? '<span class="badge">🎂 Cumpleañero</span>' : ''}${w > 1 ? '<span class="badge">👫 Con pareja</span>' : ''}`;
 
                 if (p.esMujer) {
-                    let ex = Math.max(0, p.gasto - limite);
+                    let g = gastoEfectivo(asistentes, p);
+                    let ex = Math.max(0, g - limite);
                     let pareja = asistentes.find(x => x.id === p.pareja);
-                    html += `<div>Consumo: ₡${p.gasto}</div>`;
-                    html += `<div>Cubierto por el grupo (hasta el límite): ₡${Math.min(p.gasto, limite)}</div>`;
-                    if (ex) {
+                    if (comeConPareja(asistentes, p)) {
+                        html += `<div>Comió con ${pareja.nombre} (mesa de ₡${g}, se ve en su tarjeta)</div>`;
+                        html += `<div>Comida cubierta por el grupo: ₡${Math.min(g, limite)}</div>`;
+                    } else {
+                        html += `<div>Consumo: ₡${g}</div>`;
+                        html += `<div>Cubierto por el grupo (hasta el límite): ₡${Math.min(g, limite)}</div>`;
+                    }
+                    if (ex && !comeConPareja(asistentes, p)) {
                         html += pareja
                             ? `<div>Excedente ₡${ex}: lo paga ${pareja.nombre}</div>`
                             : `<div>⚠️ Excedente ₡${ex} sin pareja asignada</div>`;
@@ -628,7 +656,16 @@
                     return;
                 }
 
-                if (!p.esCumple) { totalP += p.gasto; html += `<div>Consumo: ₡${p.gasto}</div>`; }
+                if (!p.esCumple) {
+                    let mesas = mesasCompartidasDe(asistentes, p);
+                    totalP += p.gasto;
+                    html += `<div>Consumo${mesas.length ? " (mesa con " + mesas.map(m => m.nombre).join(", ") + ")" : ""}: ₡${p.gasto}</div>`;
+                    mesas.forEach(m => {
+                        let cubierto = Math.min(p.gasto, limite);
+                        totalP -= cubierto;
+                        html += `<div>Comida ${m.nombre} cubierta por el grupo: -₡${cubierto}</div>`;
+                    });
+                }
                 if (pagaPostre.includes(p)) {
                     totalP += postrePP * w;
                     html += `<div>Postre${w > 1 ? " (x2)" : ""}: ₡${Math.round(postrePP * w)}</div>`;
@@ -639,7 +676,7 @@
                     // Lo pagan todos los hombres menos el propio cumpleañero, ponderado por pareja
                     let W = pesoTotal(asistentes, hombres.filter(h => h !== c));
                     let r = W ? c.regalo / W * w : 0;
-                    let comida = W ? Math.min(c.gasto, limite) / W * w : 0;
+                    let comida = W ? Math.min(gastoEfectivo(asistentes, c), limite) / W * w : 0;
                     totalP += r + comida;
                     html += `<div>Regalo ${c.nombre}${w > 1 ? " (x2)" : ""}: ₡${Math.round(r)}</div>`;
                     html += `<div>Comida ${c.nombre}${w > 1 ? " (x2)" : ""}: ₡${Math.round(comida)}</div>`;
@@ -652,7 +689,7 @@
                 }
 
                 // Excedente de la cumpleañera que es pareja de p
-                asistentes.filter(m => m.esCumple && m.esMujer && m.pareja === p.id).forEach(m => {
+                asistentes.filter(m => m.esCumple && m.esMujer && m.pareja === p.id && !comeConPareja(asistentes, m)).forEach(m => {
                     let ex = Math.max(0, m.gasto - limite);
                     if (!ex) return;
                     totalP += ex;
