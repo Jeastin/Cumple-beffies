@@ -209,6 +209,60 @@
             border-radius: 4px;
         }
 
+        .postre-fila {
+            margin-top: 12px;
+            padding: 10px;
+            background: #f8f7f6;
+            border: 1px solid #e1dfdd;
+            border-radius: 8px;
+        }
+
+        .postre-cab {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .postre-cab .campo {
+            flex: 1;
+        }
+
+        .postre-checks {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 14px;
+            margin-top: 8px;
+        }
+
+        .chk {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            font-size: 14px;
+            color: #323130;
+        }
+
+        .chk input {
+            width: 20px;
+            height: 20px;
+            margin: 0;
+            padding: 0;
+            -webkit-appearance: checkbox;
+            appearance: auto;
+        }
+
+        .aviso {
+            font-size: 13px;
+            color: #8a5a00;
+            background: #fff8e1;
+            border-left: 3px solid #ffb900;
+            padding: 8px 10px;
+            margin-top: 8px;
+            border-radius: 4px;
+        }
+
         details.guia {
             background: white;
             border-radius: 10px;
@@ -397,18 +451,23 @@
                 <summary>¿Cómo se usa?</summary>
                 <ol>
                     <li>Agrega a cada persona que fue: escribe su <b>nombre</b> y lo que <b>consumió</b> en el restaurante.</li>
-                    <li>Usa los 3 interruptores de cada persona: <b>🎂 Cumpleañero</b>, <b>👫 Con pareja</b> (ella no paga: él paga doble) y <b>🎂 Pareja cumple</b>.</li>
+                    <li>Usa los 3 interruptores de cada persona: <b>🎂 Cumpleañero</b>, <b>👫 Con pareja</b> (ella no paga: él paga doble) y <b>🎂 Pareja cumple</b>. Cada cumpleañero lleva su <b>regalo</b>.</li>
+                    <li>En el <b>registro de postres</b> anota cada queque (máximo 2) con su precio y marca para cuáles cumpleañeros es. Lo pagan todos menos ellos.</li>
                     <li>Si <b>su pareja es la cumpleañera</b>, anota su gasto y su regalo en la tarjeta de él: ella no paga nada y él paga lo que ella se pase del límite.</li>
                     <li>Pulsa <b>Procesar</b>. Abajo verás lo que paga cada uno y un cuadro de <b>Verificación</b> que te dice si las cuentas calzan.</li>
                 </ol>
             </details>
 
             <div class="card">
-                <label>Gasto en Postres</label>
-                <input id="postre" inputmode="numeric" oninput="formatCurrency(this)">
-
                 <label>Monto Límite por Cumpleañero</label>
                 <input id="limite" inputmode="numeric" value="₡8,000" oninput="formatCurrency(this)">
+            </div>
+
+            <div class="card">
+                <strong>🍰 Registro de postres</strong>
+                <div class="ayuda-campo">Anota cada queque (máximo 2) con su precio y marca para cuáles cumpleañeros es. Lo pagan todos menos ellos.</div>
+                <div id="postresRLista"></div>
+                <button id="postresRBtn" onclick="agregarPostre('postresR')">+ Agregar postre</button>
             </div>
 
             <div id="asistentes"></div>
@@ -436,9 +495,13 @@
             <div class="card">
                 <label>Total Comida</label>
                 <input id="bComida" inputmode="numeric" oninput="formatCurrency(this)">
+            </div>
 
-                <label>Total Postre</label>
-                <input id="bPostre" inputmode="numeric" oninput="formatCurrency(this)">
+            <div class="card">
+                <strong>🍰 Registro de postres</strong>
+                <div class="ayuda-campo">Anota cada queque (máximo 2) con su precio y marca para cuáles cumpleañeros es. Lo pagan todos menos ellos.</div>
+                <div id="postresBLista"></div>
+                <button id="postresBBtn" onclick="agregarPostre('postresB')">+ Agregar postre</button>
             </div>
 
             <div id="bAsistentes"></div>
@@ -502,6 +565,122 @@
             return lista.filter(h => !(c.dueno === h && !c.mujer));
         }
 
+        // ---- Registro de postres: cada queque conserva su precio y se liga a uno o más cumpleañeros ----
+        const MAX_POSTRES = 2;
+        let postresR = [];
+        let postresB = [];
+
+        function datosPostres(nombre) {
+            return nombre === "postresR"
+                ? { arr: postresR, personas: asistentes }
+                : { arr: postresB, personas: bAsistentes };
+        }
+
+        function claveCumple(c) { return c.dueno.id + ":" + (c.mujer ? "m" : "h"); }
+
+        function checksPostre(nombre, i) {
+            const { arr, personas } = datosPostres(nombre);
+            const d = arr[i];
+            const cumples = listaCumpleaneros(personas);
+            if (!cumples.length) return `<span class="aviso">Marca primero a los cumpleañeros en las tarjetas.</span>`;
+            return cumples.map(c => {
+                const k = claveCumple(c);
+                return `<label class="chk"><input type="checkbox" ${d.para.includes(k) ? "checked" : ""} onchange="alternarPostre('${nombre}', ${i}, '${k}', this.checked)"> ${c.nombre || "Sin nombre"}</label>`;
+            }).join("");
+        }
+
+        function avisoPostres(nombre) {
+            const { arr, personas } = datosPostres(nombre);
+            if (!arr.some(d => d.monto)) return "";
+            const sin = listaCumpleaneros(personas).filter(c => !arr.some(d => d.monto && d.para.includes(claveCumple(c))));
+            return sin.length
+                ? `<div class="aviso">⚠️ Sin queque asignado: ${sin.map(c => c.nombre || "Sin nombre").join(", ")}. Márcalos en el queque que comparten.</div>`
+                : "";
+        }
+
+        function renderPostres(nombre) {
+            const { arr, personas } = datosPostres(nombre);
+            const claves = listaCumpleaneros(personas).map(claveCumple);
+            arr.forEach(d => { d.para = d.para.filter(k => claves.includes(k)); });
+            document.getElementById(nombre + "Lista").innerHTML = (arr.length ? arr.map((d, i) => `
+      <div class="postre-fila">
+        <div class="postre-cab">
+          <div class="campo">
+            <label>Queque ${i + 1} (precio)</label>
+            <input inputmode="numeric" value="${d.monto ? "₡" + d.monto.toLocaleString() : ""}" oninput="formatCurrency(this); datosPostres('${nombre}').arr[${i}].monto=parse(this.value); refrescarAvisoPostres('${nombre}')">
+          </div>
+          <button class="btn-delete" onclick="eliminarPostre('${nombre}', ${i})">Quitar</button>
+        </div>
+        <label>¿Para cuáles cumpleañeros es?</label>
+        <div class="postre-checks" data-postres="${nombre}" data-i="${i}">${checksPostre(nombre, i)}</div>
+      </div>`).join("") : `<div class="ayuda-campo">Aún no hay postres. Agrega un queque.</div>`)
+                + `<div id="${nombre}Aviso">${avisoPostres(nombre)}</div>`;
+            document.getElementById(nombre + "Btn").disabled = arr.length >= MAX_POSTRES;
+        }
+
+        function refrescarAvisoPostres(nombre) {
+            const el = document.getElementById(nombre + "Aviso");
+            if (el) el.innerHTML = avisoPostres(nombre);
+        }
+
+        // Solo vuelve a pintar las casillas (no borra lo que se está escribiendo)
+        function refrescarPostres() {
+            ["postresR", "postresB"].forEach(nombre => {
+                document.querySelectorAll(`.postre-checks[data-postres="${nombre}"]`).forEach(div => {
+                    div.innerHTML = checksPostre(nombre, Number(div.dataset.i));
+                });
+                refrescarAvisoPostres(nombre);
+            });
+        }
+
+        function alternarPostre(nombre, i, clave, marcado) {
+            const d = datosPostres(nombre).arr[i];
+            d.para = d.para.filter(k => k !== clave);
+            if (marcado) d.para.push(clave);
+            refrescarAvisoPostres(nombre);
+        }
+
+        function agregarPostre(nombre) {
+            const { arr, personas } = datosPostres(nombre);
+            if (arr.length >= MAX_POSTRES) return;
+            // Por defecto, el primer cumpleañero que todavía no tiene queque
+            const libre = listaCumpleaneros(personas).map(claveCumple).find(k => !arr.some(d => d.para.includes(k)));
+            arr.push({ monto: 0, para: libre ? [libre] : [] });
+            renderPostres(nombre);
+        }
+
+        function eliminarPostre(nombre, i) {
+            datosPostres(nombre).arr.splice(i, 1);
+            renderPostres(nombre);
+        }
+
+        function totalPostres(arr) { return arr.reduce((s, d) => s + d.monto, 0); }
+
+        // Lo que paga p por los postres: cada queque se divide entre sus cumpleañeros
+        // y cada parte la pagan todos menos su cumpleañero (ponderado por pareja)
+        function postreDe(personas, arr, p) {
+            const cumples = listaCumpleaneros(personas);
+            const w = peso(p);
+            const porTexto = {};
+            function sumar(texto, monto) { porTexto[texto] = (porTexto[texto] || 0) + monto; }
+            arr.forEach(d => {
+                if (!d.monto) return;
+                const cs = cumples.filter(c => d.para.includes(claveCumple(c)));
+                if (!cs.length) { // sin cumpleañero marcado: entre todos por igual
+                    const W = pesoTotal(personas);
+                    sumar("Postre", W ? d.monto / W * w : 0);
+                    return;
+                }
+                const parte = d.monto / cs.length;
+                cs.forEach(c => {
+                    if (c.dueno === p && !c.mujer) return; // su propia parte no la paga
+                    const W = pesoTotal(pagadoresDe(personas, c));
+                    sumar("Postre de " + (c.nombre || "cumpleañero"), W ? parte / W * w : 0);
+                });
+            });
+            return Object.entries(porTexto).map(([texto, monto]) => ({ texto, monto }));
+        }
+
         // Un toggle con su título; los 3 van uno al lado del otro (1 — 2 — 3)
         function toggleItem(etiqueta, checked, onchange, deshabilitado) {
             return `
@@ -536,7 +715,7 @@
 
             // 1. Cumpleañero
             if (a.esCumple) {
-                html += `<div class="ayuda-campo">🎂 Hoy es su cumpleaños.</div>`
+                html += `<div class="ayuda-campo">🎂 Hoy es su cumpleaños. Su regalo lo pagan todos menos él.</div>`
                     + campoMonto("Regalo para él (monto total)", a.regalo, `${ref}.regalo`);
             }
 
@@ -544,7 +723,7 @@
             if (a.tienePareja) {
                 html += `<div class="ayuda-campo">👫 Su pareja no paga: él paga <b>doble</b> el postre, los regalos y la comida.</div>
       <label>Nombre de su pareja</label>
-      <input value="${a.parejaNombre || ""}" onchange="${ref}.parejaNombre=this.value">`;
+      <input value="${a.parejaNombre || ""}" onchange="${ref}.parejaNombre=this.value; refrescarPostres()">`;
                 if (conGasto) html += campoMonto("Gasto de su pareja en el restaurante", a.parejaGasto, `${ref}.parejaGasto`);
             }
 
@@ -593,7 +772,7 @@
       </div>
 
       <label>Nombre</label>
-      <input value="${a.nombre || ""}" onchange="asistentes[${i}].nombre=this.value">
+      <input value="${a.nombre || ""}" onchange="asistentes[${i}].nombre=this.value; refrescarPostres()">
 
       <label>Gasto en Restaurante</label>
       <input inputmode="numeric" value="${a.gasto ? "₡" + a.gasto.toLocaleString() : ""}" oninput="formatCurrency(this); asistentes[${i}].gasto=parse(this.value)">
@@ -601,20 +780,15 @@
       ${camposParticipante("asistentes", "render", i, a, true)}
     </div>`;
             });
+            renderPostres("postresR");
         }
 
         function calcular() {
-            let postre = parse(document.getElementById("postre").value);
             let limite = parse(document.getElementById("limite").value);
 
             let cumples = listaCumpleaneros(asistentes);
 
-            // Si hay más de un cumpleañero, los cumpleañeros hombres también pagan postre
-            let pagaPostre = asistentes.filter(a => !a.esCumple || cumples.length > 1);
-            let pesoPostre = pesoTotal(pagaPostre);
-            let postrePP = pesoPostre ? postre / pesoPostre : 0;
-
-            let esperado = postre
+            let esperado = totalPostres(postresR)
                 + asistentes.reduce((s, a) => s + a.gasto + (a.tienePareja ? a.parejaGasto : 0), 0)
                 + cumples.reduce((s, c) => s + c.regalo, 0);
             let calculado = 0;
@@ -635,11 +809,6 @@
                     html += `<div>Consumo de ${nombreDePareja(p)}: ₡${p.parejaGasto}</div>`;
                 }
 
-                if (pagaPostre.includes(p)) {
-                    totalP += postrePP * w;
-                    html += `<div>Postre${x2}: ₡${Math.round(postrePP * w)}</div>`;
-                }
-
                 cumples.forEach(c => {
                     if (c.dueno === p && !c.mujer) return;
                     let W = pesoTotal(pagadoresDe(asistentes, c));
@@ -648,6 +817,11 @@
                     totalP += r + comida;
                     html += `<div>Regalo ${c.nombre}${x2}: ₡${Math.round(r)}</div>`;
                     html += `<div>Comida ${c.nombre}${x2}: ₡${Math.round(comida)}</div>`;
+                });
+
+                postreDe(asistentes, postresR, p).forEach(l => {
+                    totalP += l.monto;
+                    html += `<div>${l.texto}${x2}: ₡${Math.round(l.monto)}</div>`;
                 });
 
                 if (p.esCumple) {
@@ -708,16 +882,16 @@
       </div>
 
       <label>Nombre</label>
-      <input value="${a.nombre || ""}" onchange="bAsistentes[${i}].nombre=this.value">
+      <input value="${a.nombre || ""}" onchange="bAsistentes[${i}].nombre=this.value; refrescarPostres()">
 
       ${camposParticipante("bAsistentes", "renderB", i, a, false)}
     </div>`;
             });
+            renderPostres("postresB");
         }
 
         function calcularB() {
             let comida = parse(document.getElementById("bComida").value);
-            let postre = parse(document.getElementById("bPostre").value);
 
             if (bAsistentes.length === 0) return;
 
@@ -726,11 +900,8 @@
 
             let pesoNormales = pesoTotal(normales);
             let comidaPP = pesoNormales ? comida / pesoNormales : 0;
-            let pagaPostre = cumples.length === 1 ? normales : bAsistentes;
-            let pesoPostre = pesoTotal(pagaPostre);
-            let postrePP = pesoPostre ? postre / pesoPostre : 0;
 
-            let esperado = comida + postre + cumples.reduce((s, c) => s + c.regalo, 0);
+            let esperado = comida + totalPostres(postresB) + cumples.reduce((s, c) => s + c.regalo, 0);
             let calculado = 0;
 
             let html = "<h2>Resultados Beffies</h2>";
@@ -742,7 +913,6 @@
                 html += `<div class="result"><b>${p.nombre}</b>${p.esCumple ? '<span class="badge">🎂 Cumpleañero</span>' : ''}${p.tienePareja ? `<span class="badge">👫 Con ${nombreDePareja(p)}</span>` : ''}`;
 
                 if (!p.esCumple) { totalP += comidaPP * w; html += `<div>Comida${x2}: ₡${Math.round(comidaPP * w)}</div>`; }
-                if (pagaPostre.includes(p)) { totalP += postrePP * w; html += `<div>Postre${x2}: ₡${Math.round(postrePP * w)}</div>`; }
 
                 cumples.forEach(c => {
                     if (c.dueno === p && !c.mujer) return;
@@ -750,6 +920,11 @@
                     let r = W ? c.regalo / W * w : 0;
                     totalP += r;
                     html += `<div>Regalo ${c.nombre}${x2}: ₡${Math.round(r)}</div>`;
+                });
+
+                postreDe(bAsistentes, postresB, p).forEach(l => {
+                    totalP += l.monto;
+                    html += `<div>${l.texto}${x2}: ₡${Math.round(l.monto)}</div>`;
                 });
 
                 calculado += totalP;
