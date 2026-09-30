@@ -82,6 +82,17 @@
             appearance: none;
         }
 
+        select {
+            width: 95%;
+            max-width: 100%;
+            padding: 10px;
+            border: 1px solid #c8c6c4;
+            border-radius: 6px;
+            margin-top: 5px;
+            font-size: 16px;
+            background: white;
+        }
+
         button {
             background: #0078d4;
             color: white;
@@ -372,17 +383,106 @@
         }
         function parse(v) { return Number(v.replace(/[^\d]/g, '')) || 0; }
 
+        // ---- Reglas compartidas ----
+        // Las mujeres no pagan. Un hombre con pareja paga doble (por él y por su pareja),
+        // salvo que su pareja sea una cumpleañera: ella no paga nada, solo su excedente.
+        let siguienteId = 1;
+
+        function nuevoParticipante(extra) {
+            return Object.assign({
+                id: siguienteId++, nombre: "", gasto: 0, regalo: 0,
+                esCumple: false, esMujer: false, tienePareja: false, pareja: null
+            }, extra);
+        }
+
+        function esParejaDeCumpleanera(lista, a) {
+            return lista.some(m => m.esCumple && m.esMujer && m.pareja === a.id);
+        }
+
+        function peso(lista, a) {
+            return (a.tienePareja && !esParejaDeCumpleanera(lista, a)) ? 2 : 1;
+        }
+
+        function pesoTotal(lista, personas) {
+            return personas.reduce((s, a) => s + peso(lista, a), 0);
+        }
+
+        function opcionesPareja(lista, a) {
+            return `<option value="">-- Seleccionar --</option>` +
+                lista.filter(x => !x.esMujer).map(x =>
+                    `<option value="${x.id}" ${a.pareja === x.id ? "selected" : ""}>${x.nombre || "Sin nombre"}</option>`
+                ).join("");
+        }
+
+        function refrescarParejas(nombreLista) {
+            const lista = nombreLista === "asistentes" ? asistentes : bAsistentes;
+            document.querySelectorAll(`select[data-lista="${nombreLista}"]`).forEach(sel => {
+                const a = lista[Number(sel.dataset.i)];
+                if (a) sel.innerHTML = opcionesPareja(lista, a);
+            });
+        }
+
+        function toggleHtml(etiqueta, checked, onchange) {
+            return `
+      <div class="toggle-container">
+        <label>${etiqueta}</label>
+        <label class="switch">
+          <input type="checkbox" ${checked ? "checked" : ""} onchange="${onchange}">
+          <span class="slider"></span>
+        </label>
+      </div>`;
+        }
+
+        // Campos de cumpleañero / mujer / pareja compartidos por las dos pestañas
+        function camposParticipante(lista, nombreLista, fn, i, a, conExcedente) {
+            const ref = `${nombreLista}[${i}]`;
+            let html = toggleHtml("Cumpleañero", a.esCumple,
+                `${ref}.esCumple=this.checked; if(!this.checked){${ref}.esMujer=false;${ref}.pareja=null;} ${fn}()`);
+
+            if (a.esCumple) {
+                html += toggleHtml("Es mujer (no paga)", a.esMujer,
+                    `${ref}.esMujer=this.checked; if(this.checked){${ref}.tienePareja=false;} ${fn}()`);
+                html += `
+        <label>Regalo</label>
+        <input inputmode="numeric" value="${a.regalo ? "₡" + a.regalo.toLocaleString() : ""}" oninput="formatCurrency(this); ${ref}.regalo=parse(this.value)">`;
+            }
+
+            if (a.esMujer) {
+                if (conExcedente) {
+                    html += `
+        <label>Pareja (paga lo que se pasa del límite)</label>
+        <select data-lista="${nombreLista}" data-i="${i}" onchange="${ref}.pareja=this.value?Number(this.value):null">
+          ${opcionesPareja(lista, a)}
+        </select>`;
+                }
+            } else {
+                html += toggleHtml("Tiene pareja (paga doble)", a.tienePareja, `${ref}.tienePareja=this.checked`);
+            }
+            return html;
+        }
+
+        function cuadroVerificacion(esperado, calculado, cantidad) {
+            let diff = Math.round(esperado - calculado);
+            let ok = Math.abs(diff) <= cantidad;
+            return `<div class="result"><b>Verificación</b>
+                <div>Total a recaudar: ₡${Math.round(esperado)}</div>
+                <div>Total calculado: ₡${Math.round(calculado)}</div>
+                <div>${ok ? "✅ Calza" : "⚠️ No calza, diferencia: ₡" + diff}</div></div>`;
+        }
+
         // RESTAURANTE
         let asistentes = [];
 
         function agregarAsistente() {
-            asistentes.push({ nombre: "", gasto: 0, esCumple: false, regalo: 0 });
+            asistentes.push(nuevoParticipante());
             render();
         }
 
         function eliminarAsistente(i) {
             if (confirm("¿Eliminar participante?")) {
+                let id = asistentes[i].id;
                 asistentes.splice(i, 1);
+                asistentes.forEach(a => { if (a.pareja === id) a.pareja = null; });
                 render();
             }
         }
@@ -398,23 +498,12 @@
       </div>
 
       <label>Nombre</label>
-      <input value="${a.nombre || ""}" onchange="asistentes[${i}].nombre=this.value">
+      <input value="${a.nombre || ""}" onchange="asistentes[${i}].nombre=this.value; refrescarParejas('asistentes')">
 
       <label>Gasto en Restaurante</label>
       <input inputmode="numeric" value="${a.gasto ? "₡" + a.gasto.toLocaleString() : ""}" oninput="formatCurrency(this); asistentes[${i}].gasto=parse(this.value)">
 
-      <div class="toggle-container">
-        <label>Cumpleañero</label>
-        <label class="switch">
-          <input type="checkbox" ${a.esCumple ? "checked" : ""} onchange="asistentes[${i}].esCumple=this.checked;render()">
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      ${a.esCumple ? `
-        <label>Regalo</label>
-        <input inputmode="numeric" value="${a.regalo ? "₡" + a.regalo.toLocaleString() : ""}" oninput="formatCurrency(this); asistentes[${i}].regalo=parse(this.value)">
-      `: ""}
+      ${camposParticipante(asistentes, "asistentes", "render", i, a, true)}
     </div>`;
             });
         }
@@ -423,28 +512,53 @@
             let postre = parse(document.getElementById("postre").value);
             let limite = parse(document.getElementById("limite").value);
 
-            let cumple = asistentes.filter(a => a.esCumple);
-            let total = asistentes.length;
+            let cumples = asistentes.filter(a => a.esCumple);
+            let hombres = asistentes.filter(a => !a.esMujer);
 
-            let divisorPostre = (cumple.length > 1) ? total : asistentes.filter(a => !a.esCumple).length;
-            let postrePP = divisorPostre ? postre / divisorPostre : 0;
+            // Si hay más de un cumpleañero, los cumpleañeros hombres también pagan postre
+            let pagaPostre = hombres.filter(a => !a.esCumple || cumples.length > 1);
+            let pesoPostre = pesoTotal(asistentes, pagaPostre);
+            let postrePP = pesoPostre ? postre / pesoPostre : 0;
+
+            let esperado = postre + asistentes.reduce((s, a) => s + a.gasto + (a.esCumple ? a.regalo : 0), 0);
+            let calculado = 0;
 
             let html = "<h2>Resultados</h2>";
 
             asistentes.forEach(p => {
                 let totalP = 0;
-                html += `<div class="result"><b>${p.nombre}</b>${p.esCumple ? '<span class="badge">🎂 Cumpleañero</span>' : ''}`;
+                let w = peso(asistentes, p);
+                html += `<div class="result"><b>${p.nombre}</b>${p.esCumple ? '<span class="badge">🎂 Cumpleañero</span>' : ''}${w > 1 ? '<span class="badge">👫 Con pareja</span>' : ''}`;
+
+                if (p.esMujer) {
+                    let ex = Math.max(0, p.gasto - limite);
+                    let pareja = asistentes.find(x => x.id === p.pareja);
+                    html += `<div>Consumo: ₡${p.gasto}</div>`;
+                    html += `<div>Cubierto por el grupo (hasta el límite): ₡${Math.min(p.gasto, limite)}</div>`;
+                    if (ex) {
+                        html += pareja
+                            ? `<div>Excedente ₡${ex}: lo paga ${pareja.nombre}</div>`
+                            : `<div>⚠️ Excedente ₡${ex} sin pareja asignada</div>`;
+                    }
+                    html += `<hr><b>Total: ₡0</b></div>`;
+                    return;
+                }
 
                 if (!p.esCumple) { totalP += p.gasto; html += `<div>Consumo: ₡${p.gasto}</div>`; }
-                if (!p.esCumple || cumple.length > 1) { totalP += postrePP; html += `<div>Postre: ₡${Math.round(postrePP)}</div>`; }
+                if (pagaPostre.includes(p)) {
+                    totalP += postrePP * w;
+                    html += `<div>Postre${w > 1 ? " (x2)" : ""}: ₡${Math.round(postrePP * w)}</div>`;
+                }
 
-                cumple.forEach(c => {
+                cumples.forEach(c => {
                     if (c === p) return;
-                    let r = c.regalo / (total - 1);
-                    let comida = Math.min(c.gasto, limite) / (total - 1);
+                    // Lo pagan todos los hombres menos el propio cumpleañero, ponderado por pareja
+                    let W = pesoTotal(asistentes, hombres.filter(h => h !== c));
+                    let r = W ? c.regalo / W * w : 0;
+                    let comida = W ? Math.min(c.gasto, limite) / W * w : 0;
                     totalP += r + comida;
-                    html += `<div>Regalo ${c.nombre}: ₡${Math.round(r)}</div>`;
-                    html += `<div>Comida ${c.nombre}: ₡${Math.round(comida)}</div>`;
+                    html += `<div>Regalo ${c.nombre}${w > 1 ? " (x2)" : ""}: ₡${Math.round(r)}</div>`;
+                    html += `<div>Comida ${c.nombre}${w > 1 ? " (x2)" : ""}: ₡${Math.round(comida)}</div>`;
                 });
 
                 if (p.esCumple) {
@@ -453,16 +567,26 @@
                     html += `<div>Excedente: ₡${ex}</div>`;
                 }
 
+                // Excedente de la cumpleañera que es pareja de p
+                asistentes.filter(m => m.esCumple && m.esMujer && m.pareja === p.id).forEach(m => {
+                    let ex = Math.max(0, m.gasto - limite);
+                    if (!ex) return;
+                    totalP += ex;
+                    html += `<div>Excedente ${m.nombre}: ₡${ex}</div>`;
+                });
+
+                calculado += totalP;
                 html += `<hr><b>Total: ₡${Math.round(totalP)}</b></div>`;
             });
 
+            html += cuadroVerificacion(esperado, calculado, asistentes.length);
             document.getElementById("resultados").innerHTML = html;
         }
 
         // BEFFIES
         let bAsistentes = [];
 
-        function agregarB() { bAsistentes.push({ nombre: "", esCumple: false, regalo: 0 }); renderB(); }
+        function agregarB() { bAsistentes.push(nuevoParticipante()); renderB(); }
 
         function eliminarB(i) {
             if (confirm("¿Eliminar participante?")) {
@@ -484,18 +608,7 @@
       <label>Nombre</label>
       <input value="${a.nombre || ""}" onchange="bAsistentes[${i}].nombre=this.value">
 
-      <div class="toggle-container">
-        <label>Cumpleañero</label>
-        <label class="switch">
-          <input type="checkbox" ${a.esCumple ? "checked" : ""} onchange="bAsistentes[${i}].esCumple=this.checked;renderB()">
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      ${a.esCumple ? `
-        <label>Regalo</label>
-        <input inputmode="numeric" value="${a.regalo ? "₡" + a.regalo.toLocaleString() : ""}" oninput="formatCurrency(this); bAsistentes[${i}].regalo=parse(this.value)">
-      `: ""}
+      ${camposParticipante(bAsistentes, "bAsistentes", "renderB", i, a, false)}
     </div>`;
             });
         }
@@ -504,35 +617,47 @@
             let comida = parse(document.getElementById("bComida").value);
             let postre = parse(document.getElementById("bPostre").value);
 
-            let total = bAsistentes.length;
-            if (total === 0) return;
+            if (bAsistentes.length === 0) return;
 
-            let cumple = bAsistentes.filter(a => a.esCumple);
-            let normales = bAsistentes.filter(a => !a.esCumple);
+            let cumples = bAsistentes.filter(a => a.esCumple);
+            let hombres = bAsistentes.filter(a => !a.esMujer);
+            let normales = hombres.filter(a => !a.esCumple);
 
-            let comidaPP = normales.length ? comida / normales.length : 0;
-            let divisorPostre = (cumple.length === 1) ? normales.length : total;
-            let postrePP = divisorPostre ? postre / divisorPostre : 0;
+            let comidaPP = pesoTotal(bAsistentes, normales) ? comida / pesoTotal(bAsistentes, normales) : 0;
+            let pagaPostre = cumples.length === 1 ? normales : hombres;
+            let postrePP = pesoTotal(bAsistentes, pagaPostre) ? postre / pesoTotal(bAsistentes, pagaPostre) : 0;
+
+            let esperado = comida + postre + cumples.reduce((s, c) => s + c.regalo, 0);
+            let calculado = 0;
 
             let html = "<h2>Resultados Beffies</h2>";
 
             bAsistentes.forEach(p => {
                 let totalP = 0;
-                html += `<div class="result"><b>${p.nombre}</b>${p.esCumple ? '<span class="badge">🎂 Cumpleañero</span>' : ''}`;
+                let w = peso(bAsistentes, p);
+                html += `<div class="result"><b>${p.nombre}</b>${p.esCumple ? '<span class="badge">🎂 Cumpleañero</span>' : ''}${w > 1 ? '<span class="badge">👫 Con pareja</span>' : ''}`;
 
-                if (!p.esCumple) { totalP += comidaPP; html += `<div>Comida: ₡${Math.round(comidaPP)}</div>`; }
-                if (!p.esCumple || cumple.length > 1) { totalP += postrePP; html += `<div>Postre: ₡${Math.round(postrePP)}</div>`; }
+                if (p.esMujer) {
+                    html += `<div>No paga nada</div><hr><b>Total: ₡0</b></div>`;
+                    return;
+                }
 
-                cumple.forEach(c => {
+                if (!p.esCumple) { totalP += comidaPP * w; html += `<div>Comida${w > 1 ? " (x2)" : ""}: ₡${Math.round(comidaPP * w)}</div>`; }
+                if (pagaPostre.includes(p)) { totalP += postrePP * w; html += `<div>Postre${w > 1 ? " (x2)" : ""}: ₡${Math.round(postrePP * w)}</div>`; }
+
+                cumples.forEach(c => {
                     if (c === p) return;
-                    let r = c.regalo / (total - 1);
+                    let W = pesoTotal(bAsistentes, hombres.filter(h => h !== c));
+                    let r = W ? c.regalo / W * w : 0;
                     totalP += r;
-                    html += `<div>Regalo ${c.nombre}: ₡${Math.round(r)}</div>`;
+                    html += `<div>Regalo ${c.nombre}${w > 1 ? " (x2)" : ""}: ₡${Math.round(r)}</div>`;
                 });
 
+                calculado += totalP;
                 html += `<hr><b>Total: ₡${Math.round(totalP)}</b></div>`;
             });
 
+            html += cuadroVerificacion(esperado, calculado, bAsistentes.length);
             document.getElementById("bResultados").innerHTML = html;
         }
 
@@ -541,6 +666,7 @@
         agregarB();
 
         function imprimir() { window.print(); }
+
 
     </script>
 
