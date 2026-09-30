@@ -168,6 +168,59 @@
             margin-left: 10px;
         }
 
+        .seg {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .seg button {
+            flex: 1;
+            margin-top: 0;
+            background: #f3f2f1;
+            color: #323130;
+            border: 1px solid #c8c6c4;
+        }
+
+        .seg button.on {
+            background: #0078d4;
+            color: white;
+            border-color: #0078d4;
+            font-weight: bold;
+        }
+
+        .ayuda-campo {
+            font-size: 13px;
+            color: #605e5c;
+            background: #f3f9fd;
+            border-left: 3px solid #0078d4;
+            padding: 8px 10px;
+            margin-top: 8px;
+            border-radius: 4px;
+        }
+
+        details.guia {
+            background: white;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        details.guia summary {
+            cursor: pointer;
+            font-weight: bold;
+            color: #0078d4;
+        }
+
+        details.guia ol {
+            margin: 10px 0 0;
+            padding-left: 20px;
+            color: #323130;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
         @media print {
             body {
                 font-family: "Segoe UI", Tahoma;
@@ -330,6 +383,17 @@
 
         <!-- RESTAURANTE -->
         <div id="splitTab" style="display:none;">
+            <details class="guia" open>
+                <summary>¿Cómo se usa?</summary>
+                <ol>
+                    <li>Agrega a cada persona que fue: escribe su <b>nombre</b> y lo que <b>consumió</b> en el restaurante.</li>
+                    <li>Marca quién <b>cumple hoy</b> y si es hombre o mujer. Pon el monto del <b>regalo</b>.</li>
+                    <li>Si un hombre vino con su <b>pareja</b> (ella no paga), marca "Sí, con pareja": él paga doble.</li>
+                    <li>Si la cumpleañera es <b>mujer</b>, ella no paga nada. Elige quién paga lo que se pase del límite (su pareja).</li>
+                    <li>Pulsa <b>Procesar</b>. Abajo verás lo que paga cada uno y un cuadro de <b>Verificación</b> que te dice si las cuentas calzan.</li>
+                </ol>
+            </details>
+
             <div class="card">
                 <label>Gasto en Postres</label>
                 <input id="postre" inputmode="numeric" oninput="formatCurrency(this)">
@@ -349,6 +413,17 @@
 
         <!-- BEFFIES -->
         <div id="beffiesTab">
+            <details class="guia" open>
+                <summary>¿Cómo se usa?</summary>
+                <ol>
+                    <li>Agrega a cada persona que fue: escribe su <b>nombre</b> y lo que <b>consumió</b> en el restaurante.</li>
+                    <li>Marca quién <b>cumple hoy</b> y si es hombre o mujer. Pon el monto del <b>regalo</b>.</li>
+                    <li>Si un hombre vino con su <b>pareja</b> (ella no paga), marca "Sí, con pareja": él paga doble.</li>
+                    <li>Si la cumpleañera es <b>mujer</b>, ella no paga nada. Elige quién paga lo que se pase del límite (su pareja).</li>
+                    <li>Pulsa <b>Procesar</b>. Abajo verás lo que paga cada uno y un cuadro de <b>Verificación</b> que te dice si las cuentas calzan.</li>
+                </ol>
+            </details>
+
             <div class="card">
                 <label>Total Comida</label>
                 <input id="bComida" inputmode="numeric" oninput="formatCurrency(this)">
@@ -422,41 +497,50 @@
             });
         }
 
-        function toggleHtml(etiqueta, checked, onchange) {
-            return `
-      <div class="toggle-container">
-        <label>${etiqueta}</label>
-        <label class="switch">
-          <input type="checkbox" ${checked ? "checked" : ""} onchange="${onchange}">
-          <span class="slider"></span>
-        </label>
-      </div>`;
+        function seg(opciones) {
+            return `<div class="seg">` + opciones.map(o =>
+                `<button type="button" class="${o.on ? "on" : ""}" onclick="${o.js}">${o.t}</button>`).join("") + `</div>`;
         }
 
         // Campos de cumpleañero / mujer / pareja compartidos por las dos pestañas
         function camposParticipante(lista, nombreLista, fn, i, a, conExcedente) {
             const ref = `${nombreLista}[${i}]`;
-            let html = toggleHtml("Cumpleañero", a.esCumple,
-                `${ref}.esCumple=this.checked; if(!this.checked){${ref}.esMujer=false;${ref}.pareja=null;} ${fn}()`);
+
+            let html = `<label>¿Es el cumpleañero de hoy?</label>` + seg([
+                { t: "No", on: !a.esCumple, js: `${ref}.esCumple=false;${ref}.esMujer=false;${ref}.pareja=null;${fn}()` },
+                { t: "🎂 Sí", on: a.esCumple, js: `${ref}.esCumple=true;${fn}()` }
+            ]);
 
             if (a.esCumple) {
-                html += toggleHtml("Es mujer (no paga)", a.esMujer,
-                    `${ref}.esMujer=this.checked; if(this.checked){${ref}.tienePareja=false;} ${fn}()`);
+                html += `<label>¿Es hombre o mujer?</label>` + seg([
+                    { t: "👨 Hombre", on: !a.esMujer, js: `${ref}.esMujer=false;${fn}()` },
+                    { t: "👩 Mujer", on: a.esMujer, js: `${ref}.esMujer=true;${ref}.tienePareja=false;${fn}()` }
+                ]);
                 html += `
-        <label>Regalo</label>
+        <label>Regalo (monto total del regalo)</label>
         <input inputmode="numeric" value="${a.regalo ? "₡" + a.regalo.toLocaleString() : ""}" oninput="formatCurrency(this); ${ref}.regalo=parse(this.value)">`;
             }
 
             if (a.esMujer) {
+                html += `<div class="ayuda-campo">👩 <b>Ella no paga nada.</b> Su regalo${conExcedente ? " y su comida (hasta el límite)" : ""} lo reparten los hombres.</div>`;
                 if (conExcedente) {
                     html += `
-        <label>Pareja (paga lo que se pasa del límite)</label>
-        <select data-lista="${nombreLista}" data-i="${i}" onchange="${ref}.pareja=this.value?Number(this.value):null">
+        <label>¿Quién paga lo que ella se pase del límite?</label>
+        <select data-lista="${nombreLista}" data-i="${i}" onchange="${ref}.pareja=this.value?Number(this.value):null; ${fn}()">
           ${opcionesPareja(lista, a)}
-        </select>`;
+        </select>
+        <div class="ayuda-campo">Normalmente es su pareja. Ese hombre verá el excedente en su total.</div>`;
                 }
+            } else if (esParejaDeCumpleanera(lista, a)) {
+                html += `<div class="ayuda-campo">👫 Es la pareja de la cumpleañera: <b>paga su parte</b> y además lo que ella se pase del límite. No paga doble por ella.</div>`;
             } else {
-                html += toggleHtml("Tiene pareja (paga doble)", a.tienePareja, `${ref}.tienePareja=this.checked`);
+                html += `<label>¿Viene con su pareja? (ella no paga)</label>` + seg([
+                    { t: "No, viene solo", on: !a.tienePareja, js: `${ref}.tienePareja=false;${fn}()` },
+                    { t: "👫 Sí, con pareja", on: a.tienePareja, js: `${ref}.tienePareja=true;${fn}()` }
+                ]);
+                if (a.tienePareja) {
+                    html += `<div class="ayuda-campo">Paga <b>doble</b> el postre, los regalos y la comida (por él y por su pareja).</div>`;
+                }
             }
             return html;
         }
