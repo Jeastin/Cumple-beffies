@@ -397,16 +397,13 @@
                 <summary>¿Cómo se usa?</summary>
                 <ol>
                     <li>Agrega a cada persona que fue: escribe su <b>nombre</b> y lo que <b>consumió</b> en el restaurante.</li>
-                    <li>Usa los 3 interruptores de cada persona: <b>🎂 Cumpleañero</b>, <b>👫 Con pareja</b> (ella no paga: él paga doble) y <b>🎂 Pareja cumple</b>.</li>
-                    <li>Si <b>su pareja es la cumpleañera</b>, anota su gasto y su regalo en la tarjeta de él: ella no paga nada y él paga lo que ella se pase del límite.</li>
+                    <li>Usa los 3 interruptores de cada persona: <b>🎂 Cumpleañero</b>, <b>👫 Con pareja</b> (ella no paga: él paga doble) y <b>🎂 Pareja cumple</b>. Cada cumpleañero lleva su <b>regalo</b> y su <b>postre</b>: los pagan todos menos él.</li>
+                    <li>Si <b>su pareja es la cumpleañera</b>, anota su gasto, su regalo y su postre en la tarjeta de él: ella no paga nada y él paga lo que ella se pase del límite.</li>
                     <li>Pulsa <b>Procesar</b>. Abajo verás lo que paga cada uno y un cuadro de <b>Verificación</b> que te dice si las cuentas calzan.</li>
                 </ol>
             </details>
 
             <div class="card">
-                <label>Gasto en Postres</label>
-                <input id="postre" inputmode="numeric" oninput="formatCurrency(this)">
-
                 <label>Monto Límite por Cumpleañero</label>
                 <input id="limite" inputmode="numeric" value="₡8,000" oninput="formatCurrency(this)">
             </div>
@@ -436,9 +433,6 @@
             <div class="card">
                 <label>Total Comida</label>
                 <input id="bComida" inputmode="numeric" oninput="formatCurrency(this)">
-
-                <label>Total Postre</label>
-                <input id="bPostre" inputmode="numeric" oninput="formatCurrency(this)">
             </div>
 
             <div id="bAsistentes"></div>
@@ -475,9 +469,9 @@
         function nuevoParticipante() {
             return {
                 id: siguienteId++, nombre: "", gasto: 0,
-                esCumple: false, regalo: 0,
+                esCumple: false, regalo: 0, postre: 0,
                 tienePareja: false, parejaNombre: "", parejaGasto: 0,
-                parejaEsCumple: false, parejaRegalo: 0
+                parejaEsCumple: false, parejaRegalo: 0, parejaPostre: 0
             };
         }
 
@@ -491,8 +485,8 @@
         function listaCumpleaneros(lista) {
             const r = [];
             lista.forEach(a => {
-                if (a.esCumple) r.push({ nombre: a.nombre, regalo: a.regalo, gasto: a.gasto, mujer: false, dueno: a });
-                if (a.tienePareja && a.parejaEsCumple) r.push({ nombre: nombreDePareja(a), regalo: a.parejaRegalo, gasto: a.parejaGasto, mujer: true, dueno: a });
+                if (a.esCumple) r.push({ nombre: a.nombre, regalo: a.regalo, postre: a.postre, gasto: a.gasto, mujer: false, dueno: a });
+                if (a.tienePareja && a.parejaEsCumple) r.push({ nombre: nombreDePareja(a), regalo: a.parejaRegalo, postre: a.parejaPostre, gasto: a.parejaGasto, mujer: true, dueno: a });
             });
             return r;
         }
@@ -536,8 +530,9 @@
 
             // 1. Cumpleañero
             if (a.esCumple) {
-                html += `<div class="ayuda-campo">🎂 Hoy es su cumpleaños.</div>`
-                    + campoMonto("Regalo para él (monto total)", a.regalo, `${ref}.regalo`);
+                html += `<div class="ayuda-campo">🎂 Hoy es su cumpleaños. Su regalo y su postre los pagan todos menos él.</div>`
+                    + campoMonto("Regalo para él (monto total)", a.regalo, `${ref}.regalo`)
+                    + campoMonto("Postre para él (monto total)", a.postre, `${ref}.postre`);
             }
 
             // 2. Viene con pareja
@@ -553,7 +548,8 @@
                 html += `<div class="ayuda-campo">🎂 Su pareja es la cumpleañera: ella <b>no paga nada</b>. ${conGasto
                     ? "El grupo cubre su comida hasta el límite y él paga lo que ella se pase. Ya no paga doble por ella."
                     : "Los demás pagan su regalo. Ya no paga doble por ella."}</div>`
-                    + campoMonto("Regalo para su pareja (monto total)", a.parejaRegalo, `${ref}.parejaRegalo`);
+                    + campoMonto("Regalo para su pareja (monto total)", a.parejaRegalo, `${ref}.parejaRegalo`)
+                    + campoMonto("Postre para su pareja (monto total)", a.parejaPostre, `${ref}.parejaPostre`);
             }
             return html;
         }
@@ -604,17 +600,11 @@
         }
 
         function calcular() {
-            let postre = parse(document.getElementById("postre").value);
             let limite = parse(document.getElementById("limite").value);
 
             let cumples = listaCumpleaneros(asistentes);
 
-            // Si hay más de un cumpleañero, los cumpleañeros hombres también pagan postre
-            let pagaPostre = asistentes.filter(a => !a.esCumple || cumples.length > 1);
-            let pesoPostre = pesoTotal(pagaPostre);
-            let postrePP = pesoPostre ? postre / pesoPostre : 0;
-
-            let esperado = postre
+            let esperado = cumples.reduce((s, c) => s + c.postre, 0)
                 + asistentes.reduce((s, a) => s + a.gasto + (a.tienePareja ? a.parejaGasto : 0), 0)
                 + cumples.reduce((s, c) => s + c.regalo, 0);
             let calculado = 0;
@@ -635,19 +625,16 @@
                     html += `<div>Consumo de ${nombreDePareja(p)}: ₡${p.parejaGasto}</div>`;
                 }
 
-                if (pagaPostre.includes(p)) {
-                    totalP += postrePP * w;
-                    html += `<div>Postre${x2}: ₡${Math.round(postrePP * w)}</div>`;
-                }
-
                 cumples.forEach(c => {
                     if (c.dueno === p && !c.mujer) return;
                     let W = pesoTotal(pagadoresDe(asistentes, c));
                     let r = W ? c.regalo / W * w : 0;
                     let comida = W ? Math.min(c.gasto, limite) / W * w : 0;
-                    totalP += r + comida;
+                    let postreC = W ? c.postre / W * w : 0;
+                    totalP += r + comida + postreC;
                     html += `<div>Regalo ${c.nombre}${x2}: ₡${Math.round(r)}</div>`;
                     html += `<div>Comida ${c.nombre}${x2}: ₡${Math.round(comida)}</div>`;
+                    if (c.postre) html += `<div>Postre ${c.nombre}${x2}: ₡${Math.round(postreC)}</div>`;
                 });
 
                 if (p.esCumple) {
@@ -717,7 +704,6 @@
 
         function calcularB() {
             let comida = parse(document.getElementById("bComida").value);
-            let postre = parse(document.getElementById("bPostre").value);
 
             if (bAsistentes.length === 0) return;
 
@@ -726,11 +712,8 @@
 
             let pesoNormales = pesoTotal(normales);
             let comidaPP = pesoNormales ? comida / pesoNormales : 0;
-            let pagaPostre = cumples.length === 1 ? normales : bAsistentes;
-            let pesoPostre = pesoTotal(pagaPostre);
-            let postrePP = pesoPostre ? postre / pesoPostre : 0;
 
-            let esperado = comida + postre + cumples.reduce((s, c) => s + c.regalo, 0);
+            let esperado = comida + cumples.reduce((s, c) => s + c.regalo + c.postre, 0);
             let calculado = 0;
 
             let html = "<h2>Resultados Beffies</h2>";
@@ -742,14 +725,15 @@
                 html += `<div class="result"><b>${p.nombre}</b>${p.esCumple ? '<span class="badge">🎂 Cumpleañero</span>' : ''}${p.tienePareja ? `<span class="badge">👫 Con ${nombreDePareja(p)}</span>` : ''}`;
 
                 if (!p.esCumple) { totalP += comidaPP * w; html += `<div>Comida${x2}: ₡${Math.round(comidaPP * w)}</div>`; }
-                if (pagaPostre.includes(p)) { totalP += postrePP * w; html += `<div>Postre${x2}: ₡${Math.round(postrePP * w)}</div>`; }
 
                 cumples.forEach(c => {
                     if (c.dueno === p && !c.mujer) return;
                     let W = pesoTotal(pagadoresDe(bAsistentes, c));
                     let r = W ? c.regalo / W * w : 0;
-                    totalP += r;
+                    let postreC = W ? c.postre / W * w : 0;
+                    totalP += r + postreC;
                     html += `<div>Regalo ${c.nombre}${x2}: ₡${Math.round(r)}</div>`;
+                    if (c.postre) html += `<div>Postre ${c.nombre}${x2}: ₡${Math.round(postreC)}</div>`;
                 });
 
                 calculado += totalP;
